@@ -1,0 +1,34 @@
+### Health check
+GET http://127.0.0.1:8000/health
+
+### List products
+GET http://127.0.0.1:8000/products
+
+### Create product
+POST http://127.0.0.1:8000/products
+Content-Type: application/json
+
+{
+  "name": "Sony WH-1000XM5",
+  "store": "KSP",
+  "product_url": "https://example.com/products/sony-wh1000xm5",
+  "current_price": 1299.9,
+  "target_price": 999.9,
+  "currency": "ILS",
+  "is_active": true
+}
+
+### Get product by id
+GET http://127.0.0.1:8000/products/1
+
+### Update product
+PUT http://127.0.0.1:8000/products/1
+Content-Type: application/json
+
+{
+  "current_price": 949.9,
+  "is_active": false
+}
+
+### Delete product
+DELETE http://127.0.0.1:8000/products/1
