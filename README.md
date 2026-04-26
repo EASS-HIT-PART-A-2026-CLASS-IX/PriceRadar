@@ -1,96 +1,85 @@
-# PriceRadar - Shopping Price Tracking and Alert System
+# PriceRadar
 
-`PriceRadar` is a small `FastAPI` backend for tracking products and saving a target price for future alerts. The current version focuses on the core CRUD flow for tracked products and is structured so it can grow into later exercises without replacing the API foundation.
+PriceRadar keeps one domain through all three exercises: shoppers track real product URLs, set a target price, and later consume summaries or refresh jobs without changing the product storyline.
 
 ## Stack
 
-- `FastAPI`
-- `SQLModel`
-- `SQLite`
-- `pytest`
+- `FastAPI` backend
+- `SQLModel` + `SQLite`
+- SQL migrations in `migrations/`
+- `Typer` interface for EX2 and EX3
+- `Redis` + async refresh worker for EX3
+- `pytest` and `FastAPI TestClient`
+
+## What maps to each exercise
+
+### EX1
+
+- CRUD for the main resource: tracked products
+- Validation for URLs, email, and price rules
 - Repository and service layers
+- SQLite persistence
+- `pytest` coverage for list/create/update/delete and error cases
+- README + `requests.http` + seed script
 
-## Features
+### EX2
 
-- Create, view, update, and delete tracked products
-- Persist data in a local `SQLite` database
-- Filterable list endpoint with `offset` and `limit`
-- Auto-generated API docs with Swagger and ReDoc
-- Sample seed script for demo data
-- Input validation for URLs, prices, and required fields
+- Same backend reused as-is
+- Friendly `Typer` interface that lists products and adds a new one in under a minute
+- Extra feature: summary metrics and CSV export
+- Optional browser dashboard still available at `/app`
+- Automated CLI workflow test included
 
-## Product Model
+### EX3
 
-Tracked products contain:
+- JWT login with hashed credentials and role checks
+- Protected weekly digest enhancement
+- `compose.yaml` for API + Redis + worker
+- `scripts/refresh.py` with bounded concurrency, retries, and Redis-backed idempotency
+- Demo script at `python -m app.demo`
+- Runbooks in `docs/runbooks/compose.md`
+- Design notes in `docs/EX3-notes.md`
 
-- `id`
-- `name`
-- `store`
-- `product_url`
-- `current_price`
-- `target_price`
-- `currency`
-- `is_active`
-- `created_at`
+## Quick start
 
-## Quick Start
-
-1. Create a virtual environment:
+1. Create and activate the environment:
 
 ```bash
 uv venv
-```
-
-2. Activate it on Windows PowerShell:
-
-```bash
 .venv\Scripts\activate
 ```
 
-3. Install dependencies:
+2. Install dependencies:
 
 ```bash
 uv sync
 ```
 
-4. Optional: set a custom database path.
+3. Optional: copy values from `.env.example`.
 
-PowerShell:
-
-```powershell
-$env:DATABASE_URL="sqlite:///./priceradar.db"
-```
-
-Bash:
+4. Apply migrations and seed demo data:
 
 ```bash
-export DATABASE_URL="sqlite:///./priceradar.db"
+python -m scripts.migrate
+python scripts/seed_products.py
 ```
 
-An example is also available in `.env.example`.
-
-5. Optional: seed sample products:
+5. Run the API locally:
 
 ```bash
-uv run python scripts/seed_products.py
+python -m uvicorn app.main:app --reload
 ```
 
-## Run the API
+API URLs:
 
-```bash
-uv run uvicorn app.main:app --reload
-```
-
-The API starts on `http://127.0.0.1:8000`.
-
-Interactive docs:
-
-- Swagger UI: `http://127.0.0.1:8000/docs`
+- Swagger: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
+- Optional dashboard: `http://127.0.0.1:8000/app#/`
 
-## Main Endpoints
+## EX1 walkthrough
 
-- `GET /`
+Core endpoints:
+
 - `GET /health`
 - `GET /products`
 - `GET /products/{product_id}`
@@ -98,82 +87,90 @@ Interactive docs:
 - `PUT /products/{product_id}`
 - `DELETE /products/{product_id}`
 
-Example create request:
+Manual playground:
 
-```json
-{
-  "name": "Sony WH-1000XM5",
-  "store": "KSP",
-  "product_url": "https://example.com/products/sony-wh1000xm5",
-  "current_price": 1299.9,
-  "target_price": 999.9,
-  "currency": "ILS",
-  "is_active": true
-}
-```
+- `requests.http`
 
-## Tests
-
-Run the test suite with:
-
-```bash
-uv run pytest
-```
-
-If `uv` is not installed, use:
+Run tests:
 
 ```bash
 python -m pytest
 ```
 
-Current automated coverage includes:
+## EX2 interface
 
-- Empty-state listing
-- Create, update, delete flows
-- Missing-resource `404` handling
-- Pagination behavior
-- Validation failures for invalid URL and invalid target price
+The graded interface is the Typer CLI so the project now matches the lecturer's `Streamlit or Typer` requirement.
 
-## Project Structure
+List existing entries:
 
-- `app/main.py`: FastAPI app, routes, and startup lifecycle
-- `app/models.py`: SQLModel entities and request/response schemas
-- `app/database.py`: engine, session dependency, and table creation
-- `app/repositories.py`: data access layer
-- `app/services.py`: business logic layer
-- `scripts/seed_products.py`: inserts demo products into the database
-- `tests/test_main.py`: API test coverage
-- `requests.http`: manual request collection for local testing
+```bash
+python -m app.cli list-products
+```
+
+Add a new entry:
+
+```bash
+python -m app.cli add-product --name "Steam Deck OLED" --store "Valve" --product-url "https://example.com/steam-deck-oled" --current-price 2599 --target-price 2499 --user-email analyst@priceradar.local
+```
+
+Small extra feature:
+
+```bash
+python -m app.cli summary
+python -m app.cli export-csv
+```
+
+## EX3 local stack
+
+Start the microservice stack:
+
+```bash
+docker compose up --build
+```
+
+The compose stack includes:
+
+- `api`
+- `redis`
+- `worker`
+
+Useful EX3 commands:
+
+```bash
+python -m app.cli weekly-digest
+python -m scripts.refresh
+python -m app.demo
+```
+
+Protected routes:
+
+- `POST /auth/login`
+- `GET /auth/me`
+- `GET /reports/weekly-digest`
+- `POST /refresh/run`
+
+Demo users:
+
+- Admin: `admin@priceradar.local` / `ChangeMe123!`
+- Analyst: `analyst@priceradar.local` / `Analyst123!`
+
+## Files that matter most
+
+- `app/main.py`: FastAPI routes, rate-limit headers, auth endpoints
+- `app/cli.py`: EX2 and EX3 interface
+- `app/auth.py`: password hashing and JWT
+- `app/refresh.py`: async refresh coordinator
+- `app/worker.py`: background worker loop
+- `migrations/`: SQL migration history
+- `docs/runbooks/compose.md`: compose verification guide
+- `docs/EX3-notes.md`: EX3 architecture and security notes
 
 ## Notes
 
-- The default database file `priceradar.db` is intentionally ignored by `git`.
-- The app reads `DATABASE_URL` directly from the environment; `.env.example` is documentation only unless you load it yourself.
-- `requests.http` can be used from editors that support HTTP request files.
-- The layered structure keeps route handlers thin and makes later features easier to add.
-
-## EX1 Submission Checklist
-
-- REST API implemented with `FastAPI`
-- Persistent storage implemented with `SQLite` and `SQLModel`
-- Full CRUD for the main resource `tracked products`
-- Separation between routes, service logic, and repository access
-- Automated tests included and passing
-- `README` includes setup, run, and test instructions
-- Manual request file included for quick demo during grading
-
-## Suggested Demo Flow
-
-If the lecturer opens the project for a quick review, this order is the clearest:
-
-1. Open Swagger at `http://127.0.0.1:8000/docs`
-2. Call `GET /health`
-3. Create a product with `POST /products`
-4. Show `GET /products` and `GET /products/{id}`
-5. Update the price with `PUT /products/{id}`
-6. Delete it with `DELETE /products/{id}`
-7. Mention that tests pass with `python -m pytest`
+- The database lives under `data/` by default and `*.db` is ignored by git.
+- The project uses SQL migrations instead of committing SQLite artifacts.
+- The optional browser dashboard is still present, but the official interface for grading is the Typer CLI.
 
 ## AI Assistance
 
-This project was developed with AI assistance for planning, scaffolding, and review. The code and documentation should still be verified locally by running the API and tests.
+AI assistance was used for planning, review, refactoring ideas, and documentation drafting. Every generated change was then verified locally by running tests and checking the API behavior.

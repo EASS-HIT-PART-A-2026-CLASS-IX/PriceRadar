@@ -1,33 +1,4 @@
-from collections.abc import Generator
-
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
-
-from app.database import get_session
-from app.main import app
-
-
-@pytest.fixture
-def client() -> Generator[TestClient, None, None]:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    SQLModel.metadata.create_all(engine)
-
-    def override_get_session() -> Generator[Session, None, None]:
-        with Session(engine) as session:
-            yield session
-
-    app.dependency_overrides[get_session] = override_get_session
-
-    with TestClient(app) as test_client:
-        yield test_client
-
-    app.dependency_overrides.clear()
 
 
 def test_list_products_starts_empty(client: TestClient) -> None:
@@ -43,6 +14,7 @@ def test_root_endpoint_exposes_basic_api_metadata(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.json()["name"] == "PriceRadar API"
     assert response.json()["docs"] == "/docs"
+    assert response.headers["X-RateLimit-Limit"] == "60"
 
 
 def test_create_product(client: TestClient) -> None:
@@ -92,6 +64,61 @@ def test_update_product(client: TestClient) -> None:
     assert data["is_active"] is False
 
 
+def test_update_current_price_persists_in_backend(client: TestClient) -> None:
+    create_response = client.post(
+        "/products",
+        json={
+            "name": "Steam Deck OLED",
+            "store": "Valve",
+            "product_url": "https://example.com/products/steam-deck-oled",
+            "current_price": 2599.0,
+            "target_price": 2499.0,
+            "currency": "ILS",
+            "is_active": True,
+        },
+    )
+    product_id = create_response.json()["id"]
+
+    update_response = client.put(
+        f"/products/{product_id}",
+        json={"current_price": 2399.0, "target_price": 2299.0},
+    )
+    get_response = client.get(f"/products/{product_id}")
+
+    assert update_response.status_code == 200
+    assert get_response.status_code == 200
+    assert get_response.json()["current_price"] == 2399.0
+    assert get_response.json()["target_price"] == 2299.0
+
+
+def test_pause_and_resume_product_persist_in_backend(client: TestClient) -> None:
+    create_response = client.post(
+        "/products",
+        json={
+            "name": "Galaxy Tab S8",
+            "store": "Samsung Store",
+            "product_url": "https://example.com/products/galaxy-tab-s8",
+            "current_price": 2790.0,
+            "target_price": 2590.0,
+            "currency": "ILS",
+            "is_active": True,
+        },
+    )
+    product_id = create_response.json()["id"]
+
+    pause_response = client.put(f"/products/{product_id}", json={"is_active": False})
+    paused_state = client.get(f"/products/{product_id}")
+    resume_response = client.put(f"/products/{product_id}", json={"is_active": True})
+    resumed_state = client.get(f"/products/{product_id}")
+
+    assert pause_response.status_code == 200
+    assert paused_state.status_code == 200
+    assert paused_state.json()["is_active"] is False
+    assert resume_response.status_code == 200
+    assert resumed_state.status_code == 200
+    assert resumed_state.json()["is_active"] is True
+
+
 def test_list_products_supports_pagination(client: TestClient) -> None:
     payloads = [
         {
@@ -123,6 +150,43 @@ def test_list_products_supports_pagination(client: TestClient) -> None:
     data = response.json()
     assert len(data) == 1
     assert data[0]["name"] == "Product B"
+
+
+def test_products_summary_tracks_extra_feature_metrics(client: TestClient) -> None:
+    client.post(
+        "/products",
+        json={
+            "name": "Steam Deck OLED",
+            "store": "Valve",
+            "product_url": "https://example.com/products/steam-deck-oled",
+            "current_price": 2499.0,
+            "target_price": 2499.0,
+            "currency": "ILS",
+            "is_active": True,
+        },
+    )
+    client.post(
+        "/products",
+        json={
+            "name": "Kindle Paperwhite",
+            "store": "Amazon",
+            "product_url": "https://example.com/products/kindle-paperwhite",
+            "current_price": 599.0,
+            "target_price": 549.0,
+            "currency": "ILS",
+            "is_active": False,
+        },
+    )
+
+    response = client.get("/products/summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total": 2,
+        "active": 1,
+        "below_target": 1,
+        "average_target_price": 1524.0,
+    }
 
 
 def test_delete_product(client: TestClient) -> None:

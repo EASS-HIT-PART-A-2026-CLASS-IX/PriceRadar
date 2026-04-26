@@ -4,6 +4,9 @@ GET http://127.0.0.1:8000/health
 ### List products
 GET http://127.0.0.1:8000/products
 
+### Products summary
+GET http://127.0.0.1:8000/products/summary
+
 ### Create product
 POST http://127.0.0.1:8000/products
 Content-Type: application/json
@@ -32,3 +35,20 @@ Content-Type: application/json
 
 ### Delete product
 DELETE http://127.0.0.1:8000/products/1
+
+### Login as demo admin
+POST http://127.0.0.1:8000/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@priceradar.local",
+  "password": "ChangeMe123!"
+}
+
+### Weekly digest
+GET http://127.0.0.1:8000/reports/weekly-digest
+Authorization: Bearer {{access_token}}
+
+### Trigger refresh
+POST http://127.0.0.1:8000/refresh/run
+Authorization: Bearer {{access_token}}

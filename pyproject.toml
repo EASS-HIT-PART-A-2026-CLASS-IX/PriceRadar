@@ -1,21 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "priceradar"
-version = "0.1.0"
-description = "PriceRadar backend for shopping price tracking and alerts"
+version = "0.3.0"
+description = "PriceRadar full-stack local product for price tracking, reports, and async refreshes"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
+    "httpx>=0.28.0",
+    "PyJWT>=2.10.0",
+    "redis>=6.0.0",
     "sqlmodel>=0.0.22",
+    "typer>=0.16.0",
     "uvicorn[standard]>=0.32.0",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.0",
+    "anyio>=4.8.0",
     "pytest>=8.3.0",
+    "schemathesis>=3.35.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
