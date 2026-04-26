@@ -1,84 +1,94 @@
 # PriceRadar
 
-PriceRadar keeps one domain through all three exercises: shoppers track real product URLs, set a target price, and later consume summaries or refresh jobs without changing the product storyline.
+PriceRadar is a local price-tracking product for shoppers. Users can track product URLs, store the current price, set a target price, list their tracked products, view summary metrics, and export the catalog to CSV.
+
+The project keeps the same domain across the course exercises: EX1 provides the FastAPI backend, EX2 adds a Typer interface that talks to that backend, and the repository already includes groundwork for the EX3 local microservice stack.
+
+## Current Features
+
+- Track products with name, store, URL, current price, target price, currency, and alert email.
+- List, create, update, and delete tracked products through the FastAPI API.
+- Use the Typer CLI to list products, add products, view summary metrics, and export CSV.
+- Persist data with SQLModel, SQLite, and SQL migrations.
+- Seed reproducible demo data without committing SQLite database files.
+- Run automated tests for API, CLI, auth, and async refresh behavior.
+- Open the optional browser dashboard at `/app`.
 
 ## Stack
 
 - `FastAPI` backend
 - `SQLModel` + `SQLite`
 - SQL migrations in `migrations/`
-- `Typer` interface for EX2 and EX3
-- `Redis` + async refresh worker for EX3
+- `Typer` CLI interface
+- Optional static browser dashboard
 - `pytest` and `FastAPI TestClient`
+- `Redis` + async worker groundwork for EX3
 
-## What maps to each exercise
+## Quick Start
 
-### EX1
-
-- CRUD for the main resource: tracked products
-- Validation for URLs, email, and price rules
-- Repository and service layers
-- SQLite persistence
-- `pytest` coverage for list/create/update/delete and error cases
-- README + `requests.http` + seed script
-
-### EX2
-
-- Same backend reused as-is
-- Friendly `Typer` interface that lists products and adds a new one in under a minute
-- Extra feature: summary metrics and CSV export
-- Optional browser dashboard still available at `/app`
-- Automated CLI workflow test included
-
-### EX3
-
-- JWT login with hashed credentials and role checks
-- Protected weekly digest enhancement
-- `compose.yaml` for API + Redis + worker
-- `scripts/refresh.py` with bounded concurrency, retries, and Redis-backed idempotency
-- Demo script at `python -m app.demo`
-- Runbooks in `docs/runbooks/compose.md`
-- Design notes in `docs/EX3-notes.md`
-
-## Quick start
-
-1. Create and activate the environment:
+Create and activate the environment:
 
 ```bash
 uv venv
 .venv\Scripts\activate
 ```
 
-2. Install dependencies:
+Install dependencies:
 
 ```bash
 uv sync
 ```
 
-3. Optional: copy values from `.env.example`.
+Optional: copy values from `.env.example`.
 
-4. Apply migrations and seed demo data:
+Apply migrations and seed demo data:
 
 ```bash
 python -m scripts.migrate
 python scripts/seed_products.py
 ```
 
-5. Run the API locally:
+Run the API locally:
 
 ```bash
 python -m uvicorn app.main:app --reload
 ```
 
-API URLs:
+Useful API URLs:
 
 - Swagger: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
-- Optional dashboard: `http://127.0.0.1:8000/app#/`
+- Optional browser dashboard: `http://127.0.0.1:8000/app`
 
-## EX1 walkthrough
+## CLI Interface
 
-Core endpoints:
+Run the API in one terminal, then run the Typer interface in another terminal.
+
+List existing tracked products:
+
+```bash
+python -m app.cli list-products
+```
+
+Add a new tracked product:
+
+```bash
+python -m app.cli add-product --name "Steam Deck OLED" --store "Valve" --product-url "https://example.com/steam-deck-oled" --current-price 2599 --target-price 2499 --user-email analyst@priceradar.local
+```
+
+View summary metrics:
+
+```bash
+python -m app.cli summary
+```
+
+Export tracked products to CSV:
+
+```bash
+python -m app.cli export-csv
+```
+
+## Core API
 
 - `GET /health`
 - `GET /products`
@@ -86,91 +96,76 @@ Core endpoints:
 - `POST /products`
 - `PUT /products/{product_id}`
 - `DELETE /products/{product_id}`
+- `GET /products/summary`
 
-Manual playground:
+Manual API playground:
 
 - `requests.http`
 
-Run tests:
+## Tests
+
+Run all tests:
 
 ```bash
 python -m pytest
 ```
 
-## EX2 interface
+The test suite covers:
 
-The graded interface is the Typer CLI so the project now matches the lecturer's `Streamlit or Typer` requirement.
+- API list/create/update/delete flows
+- FastAPI `TestClient` behavior
+- Validation and error cases
+- Typer CLI list/add workflows with `CliRunner`
+- Auth and async refresh groundwork used for EX3
 
-List existing entries:
+## Exercise Mapping
 
-```bash
-python -m app.cli list-products
-```
+### EX1 - FastAPI Foundations
 
-Add a new entry:
+- CRUD backend for the main resource: tracked products.
+- Validation for URLs, email, and price rules.
+- Repository and service layers.
+- SQLModel + SQLite persistence.
+- SQL migrations and seed script.
+- `pytest` coverage for list/create/update/delete.
+- README and `requests.http` playground.
 
-```bash
-python -m app.cli add-product --name "Steam Deck OLED" --store "Valve" --product-url "https://example.com/steam-deck-oled" --current-price 2599 --target-price 2499 --user-email analyst@priceradar.local
-```
+### EX2 - Friendly Interface
 
-Small extra feature:
+- Reuses the EX1 API as-is for the core flows.
+- Official graded interface: Typer CLI in `app/cli.py`.
+- Lists existing entries with `list-products`.
+- Adds new entries with `add-product`.
+- Provides extras with `summary` and `export-csv`.
+- Documents side-by-side API and CLI usage.
+- Includes automated CLI workflow tests in `tests/test_cli.py`.
 
-```bash
-python -m app.cli summary
-python -m app.cli export-csv
-```
+### EX3 Groundwork
 
-## EX3 local stack
+- `compose.yaml` for API, Redis, and worker.
+- `scripts/refresh.py` with bounded concurrency, retries, and Redis-backed idempotency.
+- JWT auth, hashed demo credentials, protected routes, and role checks.
+- `docs/runbooks/compose.md` and `docs/EX3-notes.md`.
+- Demo script at `python -m app.demo`.
 
-Start the microservice stack:
+## Files That Matter Most
 
-```bash
-docker compose up --build
-```
-
-The compose stack includes:
-
-- `api`
-- `redis`
-- `worker`
-
-Useful EX3 commands:
-
-```bash
-python -m app.cli weekly-digest
-python -m scripts.refresh
-python -m app.demo
-```
-
-Protected routes:
-
-- `POST /auth/login`
-- `GET /auth/me`
-- `GET /reports/weekly-digest`
-- `POST /refresh/run`
-
-Demo users:
-
-- Admin: `admin@priceradar.local` / `ChangeMe123!`
-- Analyst: `analyst@priceradar.local` / `Analyst123!`
-
-## Files that matter most
-
-- `app/main.py`: FastAPI routes, rate-limit headers, auth endpoints
-- `app/cli.py`: EX2 and EX3 interface
-- `app/auth.py`: password hashing and JWT
-- `app/refresh.py`: async refresh coordinator
-- `app/worker.py`: background worker loop
-- `migrations/`: SQL migration history
-- `docs/runbooks/compose.md`: compose verification guide
-- `docs/EX3-notes.md`: EX3 architecture and security notes
+- `app/main.py`: FastAPI routes and API wiring.
+- `app/cli.py`: Typer interface for EX2.
+- `app/models.py`: SQLModel/Pydantic models and validation.
+- `app/repositories.py`: persistence access.
+- `app/services.py`: product, auth, and report logic.
+- `migrations/`: SQL migration history.
+- `scripts/seed_products.py`: reproducible demo data.
+- `tests/`: API, CLI, auth, and refresh tests.
 
 ## Notes
 
-- The database lives under `data/` by default and `*.db` is ignored by git.
-- The project uses SQL migrations instead of committing SQLite artifacts.
-- The optional browser dashboard is still present, but the official interface for grading is the Typer CLI.
+- The database lives under `data/` by default.
+- `*.db` files are ignored by git and should not be committed.
+- The project uses migrations and seed scripts instead of committing SQLite artifacts.
+- The browser dashboard is optional; the official EX2 interface is the Typer CLI.
 
 ## AI Assistance
 
-AI assistance was used for planning, review, refactoring ideas, and documentation drafting. Every generated change was then verified locally by running tests and checking the API behavior.
+AI assistance was used for planning, review, refactoring ideas, UI copy, and documentation drafting. Generated changes were verified locally with `python -m pytest` and manual API/interface checks.
