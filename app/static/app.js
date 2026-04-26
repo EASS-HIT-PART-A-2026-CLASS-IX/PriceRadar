@@ -564,7 +564,7 @@ function Hero() {
             We Track the Drops.
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-            We monitor electronics stores for you and alert when a product falls below your target.
+            We monitor product prices for you and alert when an item falls below your target.
           </p>
           <div className="mt-6 max-w-4xl grid gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/90 p-4 md:grid-cols-[1.2fr_0.6fr_0.6fr_auto]">
             <input
@@ -654,7 +654,7 @@ function HomePage() {
         <div className="mb-5 flex items-end justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Top picks</p>
-            <h2 className="text-3xl font-semibold tracking-tight">This week’s best electronics deals</h2>
+            <h2 className="text-3xl font-semibold tracking-tight">This week’s best tracked deals</h2>
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
