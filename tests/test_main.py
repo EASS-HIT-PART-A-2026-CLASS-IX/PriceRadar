@@ -152,6 +152,12 @@ def test_list_products_supports_pagination(client: TestClient) -> None:
     assert data[0]["name"] == "Product B"
 
 
+def test_list_products_rejects_unbounded_offset(client: TestClient) -> None:
+    response = client.get("/products", params={"offset": 10001})
+
+    assert response.status_code == 422
+
+
 def test_products_summary_tracks_extra_feature_metrics(client: TestClient) -> None:
     client.post(
         "/products",
@@ -216,6 +222,12 @@ def test_get_product_returns_404_when_missing(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Product not found"}
+
+
+def test_get_product_rejects_unbounded_id(client: TestClient) -> None:
+    response = client.get("/products/999999999999999999999999999999")
+
+    assert response.status_code == 422
 
 
 def test_create_product_rejects_invalid_url(client: TestClient) -> None:

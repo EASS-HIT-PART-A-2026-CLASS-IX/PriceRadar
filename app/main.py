@@ -1,10 +1,8 @@
-from __future__ import annotations
-
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from html import escape
 
-from fastapi import Depends, FastAPI, Query, Request, Response, status
+from fastapi import Depends, FastAPI, Path, Query, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from redis import asyncio as redis_asyncio
@@ -50,6 +48,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 UNAUTHORIZED_RESPONSE = {401: {"description": "Missing, invalid, or expired credentials"}}
 FORBIDDEN_RESPONSE = {403: {"description": "Authenticated user is not allowed to use this route"}}
 NOT_FOUND_RESPONSE = {404: {"description": "Requested resource was not found"}}
+BAD_REQUEST_RESPONSE = {400: {"description": "Malformed JSON request body"}}
 PROTECTED_ROUTE_RESPONSES = {
     **UNAUTHORIZED_RESPONSE,
     **FORBIDDEN_RESPONSE,
@@ -129,7 +128,7 @@ def healthcheck() -> dict[str, str]:
     "/auth/login",
     response_model=TokenResponse,
     tags=["Auth"],
-    responses=PROTECTED_ROUTE_RESPONSES,
+    responses={**BAD_REQUEST_RESPONSE, **PROTECTED_ROUTE_RESPONSES},
 )
 def login(login_request: UserLogin, service: AuthService = Depends(get_auth_service)) -> TokenResponse:
     return service.login(login_request)
@@ -312,7 +311,7 @@ def preview_email_template(
     response_model=ProductUrlPreviewRead,
     tags=["Imports"],
     summary="Preview a supported external product URL",
-    responses={**NOT_FOUND_RESPONSE, **VALIDATION_OR_MESSAGE_RESPONSE},
+    responses={**BAD_REQUEST_RESPONSE, **NOT_FOUND_RESPONSE, **VALIDATION_OR_MESSAGE_RESPONSE},
 )
 def preview_url_import(request: ProductUrlPreviewRequest) -> ProductUrlPreviewRead:
     return preview_product_url(request.product_url)
@@ -335,7 +334,7 @@ def products_summary(service: ProductService = Depends(get_product_service)) -> 
     summary="List tracked products",
 )
 def list_products(
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=10000),
     limit: int = Query(default=100, ge=1, le=100),
     user_email: str | None = Query(default=None),
     service: ProductService = Depends(get_product_service),
@@ -351,7 +350,8 @@ def list_products(
     responses=NOT_FOUND_RESPONSE,
 )
 def get_product(
-    product_id: int, service: ProductService = Depends(get_product_service)
+    product_id: int = Path(..., ge=1, le=2147483647),
+    service: ProductService = Depends(get_product_service),
 ) -> TrackedProduct:
     return service.get_product(product_id)
 
@@ -362,7 +362,7 @@ def get_product(
     status_code=status.HTTP_201_CREATED,
     tags=["Products"],
     summary="Create a tracked product",
-    responses=VALIDATION_OR_MESSAGE_RESPONSE,
+    responses={**BAD_REQUEST_RESPONSE, **VALIDATION_OR_MESSAGE_RESPONSE},
 )
 def create_product(
     product_in: TrackedProductCreate, service: ProductService = Depends(get_product_service)
@@ -375,11 +375,11 @@ def create_product(
     response_model=TrackedProductRead,
     tags=["Products"],
     summary="Update a tracked product",
-    responses={**NOT_FOUND_RESPONSE, **VALIDATION_OR_MESSAGE_RESPONSE},
+    responses={**BAD_REQUEST_RESPONSE, **NOT_FOUND_RESPONSE, **VALIDATION_OR_MESSAGE_RESPONSE},
 )
 def update_product(
-    product_id: int,
     product_in: TrackedProductUpdate,
+    product_id: int = Path(..., ge=1, le=2147483647),
     service: ProductService = Depends(get_product_service),
 ) -> TrackedProduct:
     return service.update_product(product_id, product_in)
@@ -393,7 +393,8 @@ def update_product(
     responses=NOT_FOUND_RESPONSE,
 )
 def delete_product(
-    product_id: int, service: ProductService = Depends(get_product_service)
+    product_id: int = Path(..., ge=1, le=2147483647),
+    service: ProductService = Depends(get_product_service),
 ) -> Response:
     service.delete_product(product_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
