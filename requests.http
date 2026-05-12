@@ -7,14 +7,26 @@ GET http://127.0.0.1:8000/products
 ### Products summary
 GET http://127.0.0.1:8000/products/summary
 
+### Supported import hosts
+GET http://127.0.0.1:8000/imports/supported-stores
+
+### Preview supported product URL
+POST http://127.0.0.1:8000/imports/url-preview
+Content-Type: application/json
+
+{
+  "product_url": "https://demo.ksp.local/products/sony-wh1000xm5"
+}
+
 ### Create product
 POST http://127.0.0.1:8000/products
 Content-Type: application/json
 
 {
   "name": "Sony WH-1000XM5",
-  "store": "KSP",
-  "product_url": "https://example.com/products/sony-wh1000xm5",
+  "store": "KSP Demo",
+  "product_url": "https://demo.ksp.local/products/sony-wh1000xm5",
+  "image_url": "https://pisces.bbystatic.com/image2/BestBuy_US/images/products/6505/6505727_rd.jpg%3BmaxHeight%3D1920%3BmaxWidth%3D900?format=webp",
   "current_price": 1299.9,
   "target_price": 999.9,
   "currency": "ILS",
@@ -52,3 +64,12 @@ Authorization: Bearer {{access_token}}
 ### Trigger refresh
 POST http://127.0.0.1:8000/refresh/run
 Authorization: Bearer {{access_token}}
+
+### Alert events
+GET http://127.0.0.1:8000/alerts/events
+
+### Local sent email outbox
+GET http://127.0.0.1:8000/alerts/email-outbox
+
+### Branded sent email preview
+GET http://127.0.0.1:8000/alerts/email-preview

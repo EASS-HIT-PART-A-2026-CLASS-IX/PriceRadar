@@ -2,7 +2,7 @@
 
 ## Architecture
 
-PriceRadar keeps the same domain from EX1 and EX2: shoppers track products and target prices until a weekly digest or refresh cycle tells them a deal is ready.
+PriceRadar keeps the same domain from EX1 and EX2: shoppers track products and target prices until a URL refresh cycle tells them a deal is ready.
 
 The EX3 stack now contains:
 
@@ -11,10 +11,13 @@ The EX3 stack now contains:
 3. `Typer` interface in `app/cli.py`
 4. Background refresh worker in `app/worker.py`
 5. Redis for idempotent refresh runs
+6. Deterministic URL import adapters in `app/imports.py`
 
 ## Async refresher
 
 The worker and `scripts/refresh.py` run bounded concurrent refresh jobs with retries and Redis-backed idempotency keys of the form `refresh:YYYY-MM-DD:<product_id>`.
+
+For supported stores, the refresh uses the same adapter path as `POST /imports/url-preview`, so preview and refresh agree about product name, store, currency, image, and current price. If a refresh crosses from above target to at-or-below target, PriceRadar stores a local row in `price_alert_events` and a local sent email record in `email_outbox_messages`.
 
 Example trace excerpt:
 
@@ -41,4 +44,28 @@ redis key refresh:2026-04-14:2 claimed
 
 ## Enhancement
 
-The EX3 enhancement is the protected weekly markdown digest. It stays small, uses the same tracked product data, and adds value without turning the project into a larger platform.
+The EX3 enhancement is URL-based product import with preview and track confirmation.
+
+Supported demo URLs:
+
+- `https://demo.ksp.local/products/sony-wh1000xm5`
+- `https://demo.ivory.local/products/steam-deck-oled`
+- `https://demo.bug.local/products/pixel-8-pro`
+
+Flow:
+
+1. The user pastes a supported product URL in `/app` or `python -m app.cli preview-url`.
+2. The API selects the adapter by host.
+3. The adapter parses deterministic local HTML fixtures.
+4. The API returns `name`, `store`, `current_price`, `currency`, `product_url`, and `image_url`.
+5. The user confirms a target price.
+6. The product is saved to tracked products.
+7. The worker refreshes the same URL later and stores an alert event when the price reaches the target.
+8. PriceRadar stores a local `Email Sent` outbox record so graders can inspect the notification without requiring SMTP.
+
+The protected weekly markdown digest remains as a small reporting feature, while URL import is the main EX3 product enhancement.
+
+## Demo recording
+
+The repository includes a local walkthrough recording named `video1546782589.mp4`.
+It shows the PriceRadar browser dashboard and the main EX3 flow end to end.

@@ -2,6 +2,7 @@ const { useMemo, useState, useEffect, useContext, createContext } = React;
 
 const CURRENCY = new Intl.NumberFormat("en-US", { style: "currency", currency: "ILS" });
 const STORAGE_KEY = "priceradar-tracked-products-v1";
+const USER_PROFILE_KEY = "priceradar-user-profile-v1";
 const GSMARENA_IMAGE = (slug) => `https://fdn2.gsmarena.com/vv/bigpic/${slug}.jpg`;
 const PRODUCT_IMAGE = (url) => url;
 const SONY_WH1000XM5_IMAGE = PRODUCT_IMAGE("https://pisces.bbystatic.com/image2/BestBuy_US/images/products/6505/6505727_rd.jpg%3BmaxHeight%3D1920%3BmaxWidth%3D900?format=webp");
@@ -110,9 +111,19 @@ const useApp = () => useContext(AppContext);
 
 function makeWeekSeries(current, target) {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const currentValue = Number(current || 0);
+  const targetValue = Number(target || 0);
+  const anchor = Math.max(currentValue, targetValue);
+  const premiumByDay = [0.06, 0.045, 0.035, 0.025, 0.015, 0.007, 0];
+
   return days.map((day, idx) => {
-    const variance = ((idx - 3) * current * 0.01) + ((idx % 2 ? 1 : -1) * current * 0.006);
-    return { day, price: Number((current + variance).toFixed(2)), target };
+    if (idx === days.length - 1) {
+      return { day, price: Number(currentValue.toFixed(2)), target };
+    }
+    const remaining = (days.length - 1 - idx) / (days.length - 1);
+    const baseline = currentValue + (anchor - currentValue) * remaining;
+    const cushion = Math.max(currentValue, 1) * premiumByDay[idx];
+    return { day, price: Number(Math.max(0, baseline + cushion).toFixed(2)), target };
   });
 }
 
@@ -141,7 +152,7 @@ function findTrackedOverride(productLike) {
 function enrichTrackedProduct(productLike) {
   const override = findTrackedOverride(productLike);
   const match = findCatalogProduct(productLike);
-  const image = imageOverrideFor(productLike) || productLike.image || override?.image || imageOverrideFor(match) || match?.image || categoryImageByName(productLike.category);
+  const image = imageOverrideFor(productLike) || override?.image || imageOverrideFor(match) || match?.image || productLike.image_url || productLike.image || categoryImageByName(productLike.category);
   const category = productLike.category || override?.category || match?.category || "Tracked";
   return {
     ...productLike,
@@ -153,8 +164,9 @@ function enrichTrackedProduct(productLike) {
 }
 
 function displayImageFor(productLike) {
+  const override = findTrackedOverride(productLike);
   const match = findCatalogProduct(productLike);
-  return imageOverrideFor(productLike) || productLike?.image || imageOverrideFor(match) || match?.image || categoryImageByName(productLike?.category);
+  return imageOverrideFor(productLike) || override?.image || imageOverrideFor(match) || match?.image || productLike?.image_url || productLike?.image || categoryImageByName(productLike?.category);
 }
 
 function fallbackImageFor(productLike) {
@@ -166,11 +178,40 @@ function AppProvider({ children }) {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
   });
+  const [userProfile, setUserProfile] = useState(() => {
+    const raw = localStorage.getItem(USER_PROFILE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  });
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(trackedProducts));
   }, [trackedProducts]);
+
+  useEffect(() => {
+    if (userProfile) {
+      localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(userProfile));
+    } else {
+      localStorage.removeItem(USER_PROFILE_KEY);
+    }
+  }, [userProfile]);
+
+  const saveUserProfile = (profile) => {
+    const name = (profile.name || "").trim();
+    const email = (profile.email || "").trim().toLowerCase();
+    if (!name || !email || !email.includes("@") || !email.split("@")[1]?.includes(".")) {
+      setToast({ type: "error", text: "Enter a valid name and email address." });
+      return false;
+    }
+    setUserProfile({ name, email });
+    setToast({ type: "success", text: `Logged in as ${name}.` });
+    return true;
+  };
+
+  const logoutUserProfile = () => {
+    setUserProfile(null);
+    setToast({ type: "success", text: "Logged out." });
+  };
 
   const refreshTrackedFromBackend = async () => {
     try {
@@ -215,8 +256,10 @@ function AppProvider({ children }) {
       name,
       store,
       product_url: productUrl,
+      image_url: product.image_url || product.image || null,
       current_price: currentPrice,
       target_price: target,
+      user_email: product.user_email || userProfile?.email || null,
       currency: "ILS",
       is_active: true,
     };
@@ -233,7 +276,7 @@ function AppProvider({ children }) {
       }
       const item = enrichTrackedProduct({
         ...data,
-        image: product.image,
+        image: product.image_url || product.image,
         category: product.category,
       });
       setTrackedProducts((prev) => [item, ...prev]);
@@ -325,6 +368,7 @@ function AppProvider({ children }) {
         body: JSON.stringify({
           current_price: currentPrice,
           target_price: targetPrice,
+          user_email: userProfile?.email || current.user_email || null,
         }),
       });
       const data = await response.json();
@@ -400,6 +444,9 @@ function AppProvider({ children }) {
         removeTracked,
         exportCsv,
         refreshTrackedFromBackend,
+        userProfile,
+        saveUserProfile,
+        logoutUserProfile,
         toast,
         setToast,
       }}
@@ -435,66 +482,143 @@ function findCategoryBySlug(slug) {
 }
 
 function TopNav() {
-  const { trackedProducts } = useApp();
+  const { trackedProducts, userProfile, saveUserProfile, logoutUserProfile } = useApp();
   const route = useHashRoute();
   const [showCategories, setShowCategories] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginName, setLoginName] = useState(userProfile?.name || "");
+  const [loginEmail, setLoginEmail] = useState(userProfile?.email || "");
   const categoriesActive = route.startsWith("#/category/");
   const navClass = (path) =>
     `rounded-full px-4 py-1.5 text-sm transition ${
       route === `#${path}` ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
     }`;
+
+  useEffect(() => {
+    setLoginName(userProfile?.name || "");
+    setLoginEmail(userProfile?.email || "");
+  }, [userProfile]);
+
+  const submitLogin = (event) => {
+    event.preventDefault();
+    const saved = saveUserProfile({ name: loginName, email: loginEmail });
+    if (saved) {
+      setShowLogin(false);
+    }
+  };
+
   return (
-    <header className="sticky top-0 z-20 border-b border-zinc-200/70 bg-white/80 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
-        <button onClick={() => navigateTo("/")} className="group flex items-center gap-3">
-          <div className="rounded-xl bg-blue-50 p-2 text-radarBlue transition group-hover:scale-105"><i data-lucide="radar" className="h-5 w-5" /></div>
-          <div>
-            <p className="text-lg font-bold tracking-tight">PriceRadar</p>
-            <p className="text-xs text-slate-500">Premium Price Tracking</p>
-          </div>
-        </button>
-        <nav className="flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 p-1">
-          <div
-            className="relative"
-            onMouseEnter={() => setShowCategories(true)}
-            onMouseLeave={() => setShowCategories(false)}
-          >
-            <button
-              onClick={() => setShowCategories((current) => !current)}
-              className={`rounded-full px-4 py-1.5 text-sm transition ${categoriesActive ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
-            >
-              Categories
-            </button>
-            {showCategories && (
-              <>
-                <div className="absolute left-0 top-full z-20 h-3 w-80" />
-                <div className="absolute left-0 top-[calc(100%+0.75rem)] z-30 w-80 rounded-2xl border border-zinc-200 bg-white p-3 shadow-xl">
-                  <div className="grid gap-2">
-                    {CATEGORIES.map((category) => (
-                      <button
-                        key={category.name}
-                        onClick={() => {
-                          navigateTo(categoryPath(category));
-                          setShowCategories(false);
-                        }}
-                        className="flex items-center gap-3 rounded-xl p-2 text-left transition hover:bg-zinc-50"
-                      >
-                        <img src={category.image} alt={category.name} className="h-11 w-14 rounded-lg object-cover" />
-                        <span className="text-sm font-medium text-slate-700">{category.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-          <button onClick={() => navigateTo("/tracked")} className={navClass("/tracked")}>
-            Tracked Products
-            <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-radarBlue">{trackedProducts.length}</span>
+    <>
+      <header className="sticky top-0 z-20 border-b border-zinc-200/70 bg-white/80 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
+          <button onClick={() => navigateTo("/")} className="group flex items-center gap-3">
+            <div className="rounded-xl bg-blue-50 p-2 text-radarBlue transition group-hover:scale-105"><i data-lucide="radar" className="h-5 w-5" /></div>
+            <div>
+              <p className="text-lg font-bold tracking-tight">PriceRadar</p>
+              <p className="text-xs text-slate-500">Premium Price Tracking</p>
+            </div>
           </button>
-        </nav>
-      </div>
-    </header>
+          <nav className="flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 p-1">
+            <div
+              className="relative"
+              onMouseEnter={() => setShowCategories(true)}
+              onMouseLeave={() => setShowCategories(false)}
+            >
+              <button
+                onClick={() => setShowCategories((current) => !current)}
+                className={`rounded-full px-4 py-1.5 text-sm transition ${categoriesActive ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+              >
+                Categories
+              </button>
+              {showCategories && (
+                <>
+                  <div className="absolute left-0 top-full z-20 h-3 w-80" />
+                  <div className="absolute left-0 top-[calc(100%+0.75rem)] z-30 w-80 rounded-2xl border border-zinc-200 bg-white p-3 shadow-xl">
+                    <div className="grid gap-2">
+                      {CATEGORIES.map((category) => (
+                        <button
+                          key={category.name}
+                          onClick={() => {
+                            navigateTo(categoryPath(category));
+                            setShowCategories(false);
+                          }}
+                          className="flex items-center gap-3 rounded-xl p-2 text-left transition hover:bg-zinc-50"
+                        >
+                          <img src={category.image} alt={category.name} className="h-11 w-14 rounded-lg object-cover" />
+                          <span className="text-sm font-medium text-slate-700">{category.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            <button onClick={() => navigateTo("/tracked")} className={navClass("/tracked")}>
+              Tracked Products
+              <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-radarBlue">{trackedProducts.length}</span>
+            </button>
+            <button
+              onClick={() => setShowLogin(true)}
+              className="rounded-full bg-radarBlue px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-blue-500"
+            >
+              {userProfile ? userProfile.name : "Login"}
+            </button>
+          </nav>
+        </div>
+      </header>
+      {showLogin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4 backdrop-blur-sm">
+          <form onSubmit={submitLogin} className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight text-slate-900">Login</h2>
+                <p className="mt-1 text-sm text-slate-500">Your email will be used for price-drop alerts.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLogin(false)}
+                className="rounded-full border border-zinc-200 px-3 py-1 text-sm text-slate-500 transition hover:text-slate-900"
+              >
+                Close
+              </button>
+            </div>
+            <div className="space-y-3">
+              <input
+                value={loginName}
+                onChange={(event) => setLoginName(event.target.value)}
+                type="text"
+                placeholder="User name"
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm outline-none ring-radarBlue focus:ring-2"
+              />
+              <input
+                value={loginEmail}
+                onChange={(event) => setLoginEmail(event.target.value)}
+                type="email"
+                placeholder="Alert email"
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm outline-none ring-radarBlue focus:ring-2"
+              />
+            </div>
+            <div className="mt-5 flex items-center justify-between gap-3">
+              {userProfile ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    logoutUserProfile();
+                    setShowLogin(false);
+                  }}
+                  className="rounded-xl border border-zinc-200 px-4 py-2 text-sm text-slate-600 transition hover:text-slate-900"
+                >
+                  Log out
+                </button>
+              ) : <span />}
+              <button type="submit" className="rounded-xl bg-radarBlue px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-500">
+                Save Login
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -514,35 +638,47 @@ function Toast() {
 }
 
 function Hero() {
-  const { trackProduct } = useApp();
+  const { trackProduct, setToast } = useApp();
   const [url, setUrl] = useState("");
-  const [currentPrice, setCurrentPrice] = useState("");
   const [targetPrice, setTargetPrice] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
-  const onQuickTrack = async () => {
+  const onPreviewUrl = async () => {
     const cleanUrl = url.trim();
     if (!cleanUrl) {
       return;
     }
-    let host = "External Store";
+    setIsPreviewing(true);
+    setPreview(null);
     try {
-      host = new URL(cleanUrl).hostname.replace("www.", "");
-    } catch (_error) {
-      // URL validation handled in trackProduct
+      const response = await fetch("/imports/url-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ product_url: cleanUrl }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Could not preview this URL.");
+      }
+      setPreview({ ...data, image: data.image_url || GENERIC_PRODUCT_PLACEHOLDER, category: "Imported" });
+    } catch (error) {
+      setToast({ type: "error", text: error.message || "Preview failed." });
+    } finally {
+      setIsPreviewing(false);
     }
-    const quickProduct = {
-      name: `Tracked Product (${host})`,
-      store: host,
-      product_url: cleanUrl,
-      current_price: Number(currentPrice),
-      category: "External",
-      image: GENERIC_PRODUCT_PLACEHOLDER,
-    };
-    const ok = await trackProduct(quickProduct, targetPrice, cleanUrl);
+  };
+
+  const onConfirmTrack = async () => {
+    if (!preview) {
+      setToast({ type: "error", text: "Preview a supported URL before tracking." });
+      return;
+    }
+    const ok = await trackProduct(preview, targetPrice, preview.product_url);
     if (ok) {
       setUrl("");
-      setCurrentPrice("");
       setTargetPrice("");
+      setPreview(null);
       navigateTo("/tracked");
     }
   };
@@ -554,7 +690,7 @@ function Hero() {
           src={HERO_BACKGROUND_IMAGE}
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover object-center"
+          className="absolute inset-0 h-full w-full object-cover object-right"
         />
         <div className="relative px-10 py-14">
           <div className="max-w-4xl">
@@ -564,23 +700,17 @@ function Hero() {
             We Track the Drops.
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-            We monitor product prices for you and alert when an item falls below your target.
+            We monitor electronics stores for you and alert when a product falls below your target.
           </p>
-          <div className="mt-6 max-w-4xl grid gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/90 p-4 md:grid-cols-[1.2fr_0.6fr_0.6fr_auto]">
+          <div className="mt-6 max-w-4xl grid gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/90 p-4 md:grid-cols-[1.3fr_0.7fr_auto]">
             <input
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                setPreview(null);
+              }}
               type="url"
-              placeholder="Paste external store product URL"
-              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none ring-radarBlue focus:ring-2"
-            />
-            <input
-              value={currentPrice}
-              onChange={(e) => setCurrentPrice(e.target.value)}
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Current Price"
+              placeholder="Paste supported product URL"
               className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none ring-radarBlue focus:ring-2"
             />
             <input
@@ -592,10 +722,32 @@ function Hero() {
               placeholder="Target Price"
               className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none ring-radarBlue focus:ring-2"
             />
-            <button onClick={onQuickTrack} className="rounded-xl bg-radarBlue px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500">
-              Track URL
+            <button onClick={onPreviewUrl} className="rounded-xl bg-radarBlue px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500">
+              {isPreviewing ? "Previewing..." : "Preview URL"}
             </button>
           </div>
+          {preview && (
+            <div className="mt-4 flex max-w-4xl flex-col gap-4 rounded-2xl border border-zinc-200 bg-white/95 p-4 shadow-sm md:flex-row md:items-center">
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white p-2">
+                <img
+                  src={displayImageFor(preview)}
+                  alt={preview.name}
+                  onError={(event) => {
+                    event.currentTarget.src = GENERIC_PRODUCT_PLACEHOLDER;
+                  }}
+                  className="h-full w-full object-contain"
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{preview.store}</p>
+                <h3 className="mt-1 text-lg font-semibold text-slate-900">{preview.name}</h3>
+                <p className="mt-1 text-sm text-slate-600">Current price: {CURRENCY.format(preview.current_price)}</p>
+              </div>
+              <button onClick={onConfirmTrack} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700">
+                Confirm Tracking
+              </button>
+            </div>
+          )}
           </div>
         </div>
       </article>
@@ -654,7 +806,7 @@ function HomePage() {
         <div className="mb-5 flex items-end justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Top picks</p>
-            <h2 className="text-3xl font-semibold tracking-tight">This week’s best tracked deals</h2>
+            <h2 className="text-3xl font-semibold tracking-tight">This week’s best electronics deals</h2>
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -743,29 +895,45 @@ function ProductDetailsPage() {
 function PriceChart({ data, target }) {
   const points = data;
   const values = points.map((p) => p.price).concat([target]);
-  const min = Math.min(...values) * 0.97;
-  const max = Math.max(...values) * 1.03;
-  const chartWidth = 320;
-  const chartHeight = 160;
-  const plotLeft = 30;
-  const plotRight = 290;
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const span = Math.max(rawMax - rawMin, Math.max(rawMax, 1) * 0.08);
+  const min = Math.max(0, rawMin - span * 0.25);
+  const max = rawMax + span * 0.25;
+  const chartWidth = 360;
+  const chartHeight = 180;
+  const plotLeft = 62;
+  const plotRight = 330;
   const plotTop = 18;
-  const plotBottom = 130;
+  const plotBottom = 148;
   const xAt = (idx) => plotLeft + (idx * (plotRight - plotLeft)) / Math.max(points.length - 1, 1);
   const yAt = (val) => plotBottom - ((val - min) / Math.max(max - min, 1)) * (plotBottom - plotTop);
   const path = points.map((p, idx) => `${xAt(idx)},${yAt(p.price)}`).join(" ");
   const targetY = yAt(target);
+  const yTicks = [max, (max + min) / 2, min];
+  const formatAxisPrice = (value) => CURRENCY.format(value).replace(".00", "");
   return (
     <div className="h-44 w-full rounded-2xl border border-zinc-200 bg-zinc-50 p-2">
       <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-full w-full">
         <rect x="0" y="0" width={chartWidth} height={chartHeight} fill="#f8fafc" />
+        {yTicks.map((value) => {
+          const y = yAt(value);
+          return (
+            <g key={`y-${value}`}>
+              <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="#e2e8f0" strokeWidth="1" />
+              <text x={plotLeft - 8} y={y + 3} fontSize="9" textAnchor="end" fill="#64748b">{formatAxisPrice(value)}</text>
+            </g>
+          );
+        })}
+        <line x1={plotLeft} y1={plotTop} x2={plotLeft} y2={plotBottom} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={plotLeft} y1={plotBottom} x2={plotRight} y2={plotBottom} stroke="#cbd5e1" strokeWidth="1" />
         <line x1={plotLeft} y1={targetY} x2={plotRight} y2={targetY} stroke="#22c55e" strokeDasharray="4 4" strokeWidth="2" />
         <polyline points={path} fill="none" stroke="#3b82f6" strokeWidth="2.8" />
         {points.map((p, idx) => (
-          <circle key={p.day} cx={xAt(idx)} cy={yAt(p.price)} r="2.8" fill="#2563eb" />
+          <circle key={p.day} cx={xAt(idx)} cy={yAt(p.price)} r={idx === points.length - 1 ? "4" : "2.8"} fill="#2563eb" stroke={idx === points.length - 1 ? "#ffffff" : "none"} strokeWidth="2" />
         ))}
         {points.map((p, idx) => (
-          <text key={`${p.day}-lbl`} x={xAt(idx)} y="150" fontSize="9" textAnchor="middle" fill="#64748b">{p.day}</text>
+          <text key={`${p.day}-lbl`} x={xAt(idx)} y="168" fontSize="9" textAnchor="middle" fill="#64748b">{p.day}</text>
         ))}
       </svg>
     </div>
@@ -902,13 +1070,102 @@ function TrackedProductCard({ product, diff, onPause, onResume, onSavePricing, o
   );
 }
 
+function EmailAlertsPage() {
+  const { setToast } = useApp();
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadOutbox = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/alerts/email-outbox");
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data)) {
+        throw new Error(data.detail || "Could not load sent email records.");
+      }
+      setMessages(data);
+    } catch (error) {
+      setToast({ type: "error", text: error.message || "Could not load sent email records." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearOutbox = async () => {
+    try {
+      const response = await fetch("/alerts/email-outbox", { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error("Could not clear sent email records.");
+      }
+      setMessages([]);
+      setToast({ type: "success", text: "Sent email records cleared." });
+    } catch (error) {
+      setToast({ type: "error", text: error.message || "Could not clear sent email records." });
+    }
+  };
+
+  useEffect(() => {
+    loadOutbox();
+  }, []);
+
+  return (
+    <section className="mx-auto mt-10 w-full max-w-7xl px-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Notifications</p>
+          <h2 className="text-3xl font-semibold tracking-tight">Sent Email Alerts</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            Local records created when a tracked product reaches or drops below the target price.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={loadOutbox} className="rounded-xl bg-radarBlue px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500">
+            Refresh
+          </button>
+          <button onClick={clearOutbox} className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50">
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-zinc-200 bg-white shadow-sm">
+        <div className="border-b border-zinc-200 px-6 py-4">
+          <h3 className="font-semibold">Email Outbox</h3>
+        </div>
+        {loading ? (
+          <div className="p-8 text-sm text-slate-500">Loading sent email records...</div>
+        ) : !messages.length ? (
+          <div className="p-8 text-sm text-slate-500">
+            No sent email records yet. Update a tracked product so its current price reaches the target, or run the refresh worker.
+          </div>
+        ) : (
+          <div className="divide-y divide-zinc-200">
+            {messages.map((message) => (
+              <div key={message.id} className="grid gap-3 px-6 py-4 text-sm md:grid-cols-[1.2fr_1fr_0.7fr_0.7fr_0.8fr] md:items-center">
+                <div>
+                  <p className="font-semibold text-slate-900">{message.product_name}</p>
+                  <p className="mt-1 text-xs text-slate-500">{message.store}</p>
+                </div>
+                <p className="text-slate-600">{message.recipient_email}</p>
+                <p className="font-semibold text-emerald-600">{CURRENCY.format(message.current_price)}</p>
+                <p className="font-semibold text-radarBlue">{CURRENCY.format(message.target_price)}</p>
+                <p className="text-xs text-slate-500">{new Date(message.created_at).toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function Footer() {
   return (
     <footer className="mx-auto mt-16 w-full max-w-7xl px-6 pb-8">
       <div className="rounded-[2rem] border border-zinc-200 bg-white px-6 py-5 text-sm text-slate-500 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p>© {new Date().getFullYear()} PriceRadar. Premium Price Tracking.</p>
-          <a href="/alerts/email-preview" target="_blank" className="hover:text-radarBlue">Email alert preview</a>
+          <button onClick={() => navigateTo("/email-alerts")} className="hover:text-radarBlue">Email alert preview</button>
         </div>
       </div>
     </footer>
@@ -924,6 +1181,7 @@ function AppShell() {
   let page = <HomePage />;
   if (route.startsWith("#/category/")) page = <CategoryPage />;
   if (route === "#/tracked") page = <TrackedPage />;
+  if (route === "#/email-alerts") page = <EmailAlertsPage />;
   if (route.startsWith("#/product/")) page = <ProductDetailsPage />;
   return (
     <div className="pb-12">

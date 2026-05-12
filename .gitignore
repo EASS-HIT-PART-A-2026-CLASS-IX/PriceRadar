@@ -1,8 +1,16 @@
 .pytest_cache/
+.hypothesis/
 __pycache__/
 *.py[cod]
+*.egg-info/
+*.sqlite
+*.sqlite3
 *.db
+data/
+exports/
+schemathesis-report/
 .env
 .env.*
 !.env.example
 .venv/
+.vscode/

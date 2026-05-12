@@ -5,10 +5,12 @@ from datetime import UTC, date, datetime
 from typing import Awaitable, Callable, Protocol
 
 import anyio
+from fastapi import HTTPException
 from sqlmodel import Session
 
+from app.imports import preview_product_url
 from app.models import TrackedProduct, TrackedProductUpdate
-from app.repositories import ProductRepository
+from app.repositories import AlertRepository, EmailOutboxRepository, ProductRepository
 from app.services import ProductService
 
 
@@ -29,6 +31,11 @@ class RefreshStats:
 
 async def deterministic_price_fetcher(product: TrackedProduct) -> float:
     await anyio.sleep(0)
+    try:
+        preview = preview_product_url(product.product_url)
+        return preview.current_price
+    except HTTPException:
+        pass
     factor = 1 - (((product.id or 1) % 4) + 1) * 0.01
     return round(max(product.target_price * 0.85, product.current_price * factor), 2)
 
@@ -55,14 +62,28 @@ class RefreshCoordinator:
 
     def _save_price(self, product_id: int, refreshed_price: float, checked_at: datetime) -> None:
         with self.session_factory() as session:
-            service = ProductService(ProductRepository(session))
-            service.update_product(
+            products = ProductRepository(session)
+            product = ProductService(products).get_product(product_id)
+            previous_price = product.current_price
+            ProductService(products).update_product(
                 product_id,
                 TrackedProductUpdate(
                     current_price=refreshed_price,
                     last_checked_at=checked_at,
                 ),
             )
+            if previous_price > product.target_price and refreshed_price <= product.target_price:
+                alert = AlertRepository(session).create_for_product(
+                    product=product,
+                    refreshed_price=refreshed_price,
+                    checked_at=checked_at,
+                )
+                EmailOutboxRepository(session).create_for_product(
+                    product=product,
+                    refreshed_price=refreshed_price,
+                    checked_at=checked_at,
+                    alert_event=alert,
+                )
 
     async def run_for_day(self, *, run_date: date | None = None) -> RefreshStats:
         active_products = self._load_active_products()

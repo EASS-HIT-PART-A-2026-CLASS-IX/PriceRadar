@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
 
@@ -14,12 +14,19 @@ from app.models import (
     TrackedProductUpdate,
     UserLogin,
 )
-from app.repositories import ProductRepository, UserRepository
+from app.repositories import AlertRepository, EmailOutboxRepository, ProductRepository, UserRepository
 
 
 class ProductService:
-    def __init__(self, repository: ProductRepository) -> None:
+    def __init__(
+        self,
+        repository: ProductRepository,
+        alerts: AlertRepository | None = None,
+        email_outbox: EmailOutboxRepository | None = None,
+    ) -> None:
         self.repository = repository
+        self.alerts = alerts
+        self.email_outbox = email_outbox
 
     def list_products(
         self, *, offset: int = 0, limit: int = 100, user_email: str | None = None
@@ -41,6 +48,7 @@ class ProductService:
 
     def update_product(self, product_id: int, product_in: TrackedProductUpdate) -> TrackedProduct:
         product = self.get_product(product_id)
+        was_above_target = product.current_price > product.target_price
         next_current_price = (
             product.current_price if product_in.current_price is None else product_in.current_price
         )
@@ -52,7 +60,28 @@ class ProductService:
                 current_price=next_current_price,
                 target_price=next_target_price,
             )
-        return self.repository.update(product, product_in)
+        updated = self.repository.update(product, product_in)
+        should_send_alert = (
+            updated.is_active
+            and was_above_target
+            and next_current_price <= next_target_price
+            and self.alerts is not None
+            and self.email_outbox is not None
+        )
+        if should_send_alert:
+            checked_at = product_in.last_checked_at or datetime.now(UTC)
+            alert = self.alerts.create_for_product(
+                product=updated,
+                refreshed_price=next_current_price,
+                checked_at=checked_at,
+            )
+            self.email_outbox.create_for_product(
+                product=updated,
+                refreshed_price=next_current_price,
+                checked_at=checked_at,
+                alert_event=alert,
+            )
+        return updated
 
     def delete_product(self, product_id: int) -> None:
         product = self.get_product(product_id)

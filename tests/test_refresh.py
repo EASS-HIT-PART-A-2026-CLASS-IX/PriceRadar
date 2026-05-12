@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from app.models import TrackedProduct
+from app.models import EmailOutboxMessage, PriceAlertEvent, TrackedProduct
 from app.refresh import RefreshCoordinator
 
 
@@ -66,3 +66,10 @@ async def test_refresh_uses_retries_and_redis_backed_idempotency(test_engine) ->
         assert refreshed is not None
         assert refreshed.current_price == 2490.0
         assert refreshed.last_checked_at is not None
+        alerts = list(session.exec(select(PriceAlertEvent)))
+        assert len(alerts) == 1
+        assert alerts[0].product_name == "Steam Deck OLED"
+        emails = list(session.exec(select(EmailOutboxMessage)))
+        assert len(emails) == 1
+        assert emails[0].product_name == "Steam Deck OLED"
+        assert emails[0].recipient_email == "user@priceradar.local"

@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlmodel import Session, select
 
-from app.models import AppUser, TrackedProduct, TrackedProductCreate, TrackedProductUpdate
+from app.models import (
+    AppUser,
+    EmailOutboxMessage,
+    PriceAlertEvent,
+    TrackedProduct,
+    TrackedProductCreate,
+    TrackedProductUpdate,
+)
 
 
 class ProductRepository:
@@ -36,7 +45,7 @@ class ProductRepository:
         return product
 
     def update(self, product: TrackedProduct, product_in: TrackedProductUpdate) -> TrackedProduct:
-        update_data = product_in.model_dump(exclude_unset=True)
+        update_data = product_in.model_dump(exclude_unset=True, exclude_none=True)
         product.sqlmodel_update(update_data)
         self.session.add(product)
         self.session.commit()
@@ -79,3 +88,83 @@ class UserRepository:
 
     def list(self) -> list[AppUser]:
         return list(self.session.exec(select(AppUser).order_by(AppUser.id)))
+
+
+class AlertRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def create_for_product(
+        self,
+        *,
+        product: TrackedProduct,
+        refreshed_price: float,
+        checked_at: datetime,
+    ) -> PriceAlertEvent:
+        alert = PriceAlertEvent(
+            product_id=product.id or 0,
+            product_name=product.name,
+            store=product.store,
+            product_url=product.product_url,
+            current_price=refreshed_price,
+            target_price=product.target_price,
+            currency=product.currency,
+            message=(
+                f"{product.name} is now {refreshed_price:.2f} {product.currency}, "
+                f"below target {product.target_price:.2f} {product.currency}."
+            ),
+            created_at=checked_at,
+        )
+        self.session.add(alert)
+        self.session.commit()
+        self.session.refresh(alert)
+        return alert
+
+    def list(self, *, limit: int = 100) -> list[PriceAlertEvent]:
+        statement = select(PriceAlertEvent).order_by(PriceAlertEvent.id.desc()).limit(limit)
+        return list(self.session.exec(statement))
+
+
+class EmailOutboxRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def create_for_product(
+        self,
+        *,
+        product: TrackedProduct,
+        refreshed_price: float,
+        checked_at: datetime,
+        alert_event: PriceAlertEvent | None = None,
+    ) -> EmailOutboxMessage:
+        recipient = product.user_email or "user@priceradar.local"
+        subject = f"PriceRadar alert: {product.name} dropped below your target"
+        message = EmailOutboxMessage(
+            alert_event_id=alert_event.id if alert_event else None,
+            product_id=product.id or 0,
+            recipient_email=recipient,
+            subject=subject,
+            product_name=product.name,
+            store=product.store,
+            product_url=product.product_url,
+            current_price=refreshed_price,
+            target_price=product.target_price,
+            currency=product.currency,
+            status="sent",
+            created_at=checked_at,
+        )
+        self.session.add(message)
+        self.session.commit()
+        self.session.refresh(message)
+        return message
+
+    def list(self, *, limit: int = 100) -> list[EmailOutboxMessage]:
+        statement = select(EmailOutboxMessage).order_by(EmailOutboxMessage.id.desc()).limit(limit)
+        return list(self.session.exec(statement))
+
+    def clear(self) -> int:
+        messages = self.list(limit=500)
+        for message in messages:
+            self.session.delete(message)
+        self.session.commit()
+        return len(messages)

@@ -1,0 +1,12 @@
+.git
+.venv
+.pytest_cache
+.hypothesis
+__pycache__
+*.py[cod]
+*.egg-info
+.env
+.env.*
+data
+*.db
+*.mp4

@@ -85,6 +85,46 @@ def add_product(
     typer.echo(f"Tracked product #{product['id']}: {product['name']}")
 
 
+@cli.command("preview-url")
+def preview_url(
+    product_url: str = typer.Option(..., prompt=True, help="Supported external product URL."),
+) -> None:
+    with build_client() as client:
+        response = client.post("/imports/url-preview", json={"product_url": product_url})
+        _raise_for_error(response)
+        preview = response.json()
+    typer.echo(f"{preview['name']} | {preview['store']}")
+    typer.echo(f"Current price: {preview['current_price']} {preview['currency']}")
+    typer.echo(f"Image: {preview.get('image_url') or 'none'}")
+
+
+@cli.command("track-url")
+def track_url(
+    product_url: str = typer.Option(..., prompt=True, help="Supported external product URL."),
+    target_price: float = typer.Option(..., prompt=True),
+    user_email: str | None = typer.Option(default=None),
+) -> None:
+    with build_client() as client:
+        preview_response = client.post("/imports/url-preview", json={"product_url": product_url})
+        _raise_for_error(preview_response)
+        preview = preview_response.json()
+        payload = {
+            "name": preview["name"],
+            "store": preview["store"],
+            "product_url": preview["product_url"],
+            "image_url": preview.get("image_url"),
+            "current_price": preview["current_price"],
+            "target_price": target_price,
+            "user_email": user_email,
+            "currency": preview["currency"],
+            "is_active": True,
+        }
+        create_response = client.post("/products", json=payload)
+        _raise_for_error(create_response)
+        product = create_response.json()
+    typer.echo(f"Tracked product #{product['id']}: {product['name']}")
+
+
 @cli.command("summary")
 def summary() -> None:
     with build_client() as client:
@@ -114,6 +154,7 @@ def export_csv(
                 "name",
                 "store",
                 "product_url",
+                "image_url",
                 "current_price",
                 "target_price",
                 "currency",

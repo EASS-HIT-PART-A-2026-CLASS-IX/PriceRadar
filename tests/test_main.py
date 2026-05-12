@@ -278,6 +278,45 @@ def test_update_product_rejects_invalid_target_price_rule(client: TestClient) ->
     }
 
 
+def test_update_to_target_price_creates_local_sent_email(client: TestClient) -> None:
+    create_response = client.post(
+        "/products",
+        json={
+            "name": "iPhone 15 Pro",
+            "store": "KSP",
+            "product_url": "https://example.com/iphone-15-pro",
+            "current_price": 4999.0,
+            "target_price": 4599.0,
+            "user_email": "shopper@example.com",
+            "currency": "ILS",
+            "is_active": True,
+        },
+    )
+    product_id = create_response.json()["id"]
+
+    update_response = client.put(f"/products/{product_id}", json={"target_price": 4999.0})
+    outbox_response = client.get("/alerts/email-outbox")
+    preview_response = client.get("/alerts/email-preview")
+
+    assert update_response.status_code == 200
+    assert outbox_response.status_code == 200
+    outbox = outbox_response.json()
+    assert len(outbox) == 1
+    assert outbox[0]["recipient_email"] == "shopper@example.com"
+    assert outbox[0]["product_name"] == "iPhone 15 Pro"
+    assert outbox[0]["current_price"] == 4999.0
+    assert outbox[0]["target_price"] == 4999.0
+    assert "iPhone 15 Pro" in preview_response.text
+    assert "shopper@example.com" in preview_response.text
+
+    clear_response = client.delete("/alerts/email-outbox")
+    empty_outbox_response = client.get("/alerts/email-outbox")
+
+    assert clear_response.status_code == 204
+    assert empty_outbox_response.status_code == 200
+    assert empty_outbox_response.json() == []
+
+
 def test_update_product_returns_404_when_missing(client: TestClient) -> None:
     response = client.put("/products/999", json={"current_price": 100.0})
 
