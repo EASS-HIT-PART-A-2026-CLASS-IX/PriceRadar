@@ -67,5 +67,5 @@ The protected weekly markdown digest remains as a small reporting feature, while
 
 ## Demo recording
 
-The repository includes a local walkthrough recording named `video1546782589.mp4`.
+The repository includes a local walkthrough recording named `video1974253171.mp4`.
 It shows the PriceRadar browser dashboard and the main EX3 flow end to end.

@@ -187,7 +187,7 @@ dashboard at `http://127.0.0.1:8000/app` and verify API health at
 - Local email outbox showing notification emails prepared for users.
 - `docs/runbooks/compose.md` and `docs/EX3-notes.md`.
 - Demo script at `python -m app.demo`.
-- Local screen recording attached as `video1546782589.mp4`.
+- Local screen recording attached as `video1974253171.mp4`.
 
 ## Files That Matter Most
 
@@ -206,7 +206,7 @@ dashboard at `http://127.0.0.1:8000/app` and verify API health at
 - `*.db` files are ignored by git and should not be committed.
 - The project uses migrations and seed scripts instead of committing SQLite artifacts.
 - The browser dashboard is optional; the official EX2 interface is the Typer CLI.
-- The EX3 walkthrough recording is included in the repository as `video1546782589.mp4`.
+- The EX3 walkthrough recording is included in the repository as `video1974253171.mp4`.
 
 ## AI Assistance
 
