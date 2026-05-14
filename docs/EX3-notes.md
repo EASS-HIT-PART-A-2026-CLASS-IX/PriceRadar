@@ -40,7 +40,7 @@ redis key refresh:2026-04-14:2 claimed
 1. Change `JWT_SECRET` in `.env` or compose environment.
 2. Restart `api` and `worker`.
 3. Log in again so graders receive freshly signed tokens.
-4. If demo credentials were shared, rotate `DEMO_ADMIN_PASSWORD` and `DEMO_ANALYST_PASSWORD`, then rerun `python scripts/seed_products.py` on a fresh database.
+4. If demo credentials were shared, rotate `DEMO_ADMIN_PASSWORD` and `DEMO_ANALYST_PASSWORD`, then rerun `uv run python scripts/seed_products.py` on a fresh database.
 
 ## Enhancement
 
@@ -54,7 +54,7 @@ Supported demo URLs:
 
 Flow:
 
-1. The user pastes a supported product URL in `/app` or `python -m app.cli preview-url`.
+1. The user pastes a supported product URL in `/app` or `uv run python -m app.cli preview-url`.
 2. The API selects the adapter by host.
 3. The adapter parses deterministic local HTML fixtures.
 4. The API returns `name`, `store`, `current_price`, `currency`, `product_url`, and `image_url`.
