@@ -158,3 +158,46 @@ def test_cli_track_url_previews_then_creates_product(monkeypatch) -> None:
     assert result.exit_code == 0
     assert seen_paths == ["/imports/url-preview", "/products"]
     assert "Tracked product #3" in result.stdout
+
+
+def test_cli_export_csv_writes_api_products(monkeypatch, tmp_path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/products"
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 1,
+                    "name": "Steam Deck OLED",
+                    "store": "Valve",
+                    "product_url": "https://example.com/steam-deck-oled",
+                    "image_url": None,
+                    "current_price": 2599.0,
+                    "target_price": 2499.0,
+                    "currency": "ILS",
+                    "is_active": True,
+                    "user_email": "analyst@priceradar.local",
+                    "created_at": "2026-04-14T10:00:00Z",
+                    "last_checked_at": None,
+                    "future_api_field": "ignored",
+                }
+            ],
+        )
+
+    monkeypatch.setattr(
+        "app.cli.build_client",
+        lambda base_url=None: httpx.Client(
+            transport=httpx.MockTransport(handler),
+            base_url="http://testserver",
+        ),
+    )
+
+    output = tmp_path / "tracked-products.csv"
+    result = runner.invoke(cli, ["export-csv", "--output", str(output)])
+
+    assert result.exit_code == 0
+    csv_text = output.read_text(encoding="utf-8")
+    assert "Steam Deck OLED" in csv_text
+    assert "created_at" in csv_text
+    assert "last_checked_at" in csv_text
+    assert "future_api_field" not in csv_text

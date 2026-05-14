@@ -160,7 +160,10 @@ def export_csv(
                 "currency",
                 "is_active",
                 "user_email",
+                "created_at",
+                "last_checked_at",
             ],
+            extrasaction="ignore",
         )
         writer.writeheader()
         writer.writerows(products)

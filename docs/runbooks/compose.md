@@ -27,18 +27,18 @@ Expected headers include:
 ## Seed demo data
 
 ```bash
-python -m scripts.migrate
-python scripts/seed_products.py
+docker compose exec api python -m scripts.migrate
+docker compose exec api python scripts/seed_products.py
 ```
 
 ## Run the Typer interface
 
 ```bash
-python -m app.cli list-products
-python -m app.cli preview-url --product-url "https://demo.ksp.local/products/sony-wh1000xm5"
-python -m app.cli track-url --product-url "https://demo.ksp.local/products/sony-wh1000xm5" --target-price 999
-python -m app.cli summary
-python -m app.cli weekly-digest
+docker compose exec api python -m app.cli list-products
+docker compose exec api python -m app.cli preview-url --product-url "https://demo.ksp.local/products/sony-wh1000xm5"
+docker compose exec api python -m app.cli track-url --product-url "https://demo.ksp.local/products/sony-wh1000xm5" --target-price 999
+docker compose exec api python -m app.cli summary
+docker compose exec api python -m app.cli weekly-digest
 ```
 
 The browser dashboard is available at `http://127.0.0.1:8000/app`. Paste one of these supported URLs into the hero input:
@@ -50,7 +50,7 @@ The browser dashboard is available at `http://127.0.0.1:8000/app`. Paste one of 
 ## Verify refresh and alert events
 
 ```bash
-python -m scripts.refresh
+docker compose exec api python -m scripts.refresh
 curl http://127.0.0.1:8000/alerts/events
 curl http://127.0.0.1:8000/alerts/email-outbox
 ```
@@ -60,7 +60,7 @@ When a refreshed price crosses below the product target, `/alerts/events` return
 ## Run checks
 
 ```bash
-python -m pytest
+uv run python -m pytest
 uv run schemathesis run --checks not_a_server_error,status_code_conformance,content_type_conformance,response_schema_conformance -n 10 --request-timeout 5 http://localhost:8000/openapi.json
 ```
 

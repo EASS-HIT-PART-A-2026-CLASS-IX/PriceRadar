@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from os import getenv
 
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
 
 @dataclass(frozen=True, slots=True)
 class Settings:

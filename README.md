@@ -27,34 +27,50 @@ The project keeps the same domain across the course exercises: EX1 provides the 
 - `pytest` and `FastAPI TestClient`
 - `Redis` + async worker groundwork for EX3
 
+## Prerequisites
+
+- Python 3.11 or newer
+- `uv` for local setup and commands
+- Docker Desktop, only if you want to run the Compose stack
+
 ## Quick Start
 
-Create and activate the environment:
-
-```bash
-uv venv
-.venv\Scripts\activate
-```
-
-Install dependencies:
+Install the local environment:
 
 ```bash
 uv sync
 ```
+
+`uv sync` creates the virtual environment automatically. The commands below use
+`uv run`, so they work even if shell activation is blocked by Windows PowerShell
+execution policy.
 
 Optional: copy values from `.env.example`.
 
 Apply migrations and seed demo data:
 
 ```bash
-python -m scripts.migrate
-python scripts/seed_products.py
+uv run python -m scripts.migrate
+uv run python scripts/seed_products.py
 ```
 
 Run the API locally:
 
 ```bash
-python -m uvicorn app.main:app --reload
+uv run python -m uvicorn app.main:app --reload
+```
+
+If you prefer an activated shell, you can activate the environment first and
+then omit `uv run` from the commands:
+
+```bash
+.venv\Scripts\activate
+```
+
+On macOS/Linux, the activation command is:
+
+```bash
+source .venv/bin/activate
 ```
 
 Useful API URLs:
@@ -70,32 +86,32 @@ Run the API in one terminal, then run the Typer interface in another terminal.
 List existing tracked products:
 
 ```bash
-python -m app.cli list-products
+uv run python -m app.cli list-products
 ```
 
 Add a new tracked product:
 
 ```bash
-python -m app.cli add-product --name "Steam Deck OLED" --store "Valve" --product-url "https://example.com/steam-deck-oled" --current-price 2599 --target-price 2499 --user-email analyst@priceradar.local
+uv run python -m app.cli add-product --name "Steam Deck OLED" --store "Valve" --product-url "https://example.com/steam-deck-oled" --current-price 2599 --target-price 2499 --user-email analyst@priceradar.local
 ```
 
 Preview and track a supported external URL:
 
 ```bash
-python -m app.cli preview-url --product-url "https://demo.ksp.local/products/sony-wh1000xm5"
-python -m app.cli track-url --product-url "https://demo.ksp.local/products/sony-wh1000xm5" --target-price 999
+uv run python -m app.cli preview-url --product-url "https://demo.ksp.local/products/sony-wh1000xm5"
+uv run python -m app.cli track-url --product-url "https://demo.ksp.local/products/sony-wh1000xm5" --target-price 999
 ```
 
 View summary metrics:
 
 ```bash
-python -m app.cli summary
+uv run python -m app.cli summary
 ```
 
 Export tracked products to CSV:
 
 ```bash
-python -m app.cli export-csv
+uv run python -m app.cli export-csv
 ```
 
 ## Core API
@@ -129,7 +145,7 @@ Manual API playground:
 Run all tests:
 
 ```bash
-python -m pytest
+uv run python -m pytest
 ```
 
 The test suite covers:
@@ -186,7 +202,7 @@ dashboard at `http://127.0.0.1:8000/app` and verify API health at
 - Local price-drop alert event persistence.
 - Local email outbox showing notification emails prepared for users.
 - `docs/runbooks/compose.md` and `docs/EX3-notes.md`.
-- Demo script at `python -m app.demo`.
+- Demo script at `uv run python -m app.demo`.
 - Local screen recording attached as `video1974253171.mp4`.
 
 ## Files That Matter Most
@@ -210,4 +226,4 @@ dashboard at `http://127.0.0.1:8000/app` and verify API health at
 
 ## AI Assistance
 
-AI assistance was used for planning, review, refactoring ideas, UI copy, and documentation drafting. Generated changes were verified locally with `python -m pytest` and manual API/interface checks.
+AI assistance was used for planning, review, refactoring ideas, UI copy, and documentation drafting. Generated changes were verified locally with `uv run python -m pytest` and manual API/interface checks.
