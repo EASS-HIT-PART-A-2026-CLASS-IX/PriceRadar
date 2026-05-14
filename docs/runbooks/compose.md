@@ -64,4 +64,11 @@ uv run python -m pytest
 uv run schemathesis run --checks not_a_server_error,status_code_conformance,content_type_conformance,response_schema_conformance -n 10 --request-timeout 5 http://localhost:8000/openapi.json
 ```
 
+On Windows PowerShell, set UTF-8 output first if Schemathesis renders box-drawing characters:
+
+```powershell
+$env:PYTHONIOENCODING = "utf-8"
+uv run schemathesis run --checks not_a_server_error,status_code_conformance,content_type_conformance,response_schema_conformance -n 10 --request-timeout 5 http://localhost:8000/openapi.json
+```
+
 The Schemathesis command is the CI-friendly smoke test for the contract. `pytest` covers API, CLI, auth, and the async refresh worker.
